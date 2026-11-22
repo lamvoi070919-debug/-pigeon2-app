@@ -41,11 +41,7 @@ def init_db():
     n = c.execute("SELECT COUNT(*) FROM pairs").fetchone()[0]
     if n == 0:
         c.executemany("INSERT INTO pairs(id) VALUES(?)", [(i,) for i in range(1,1501)])
-    if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        c.executemany("INSERT INTO users VALUES(?,?,?,?)", [
-            ("chu_trai","Chủ trại","admin","123456"),
-            ("quan_ly","Quản lý","user","123456"),
-        ])
+    c.execute("INSERT OR IGNORE INTO users VALUES ('chu_trai', 'Chủ trại', 'admin', '123456')")
     c.commit(); c.close()
 
 def log(username, hanh_dong):
