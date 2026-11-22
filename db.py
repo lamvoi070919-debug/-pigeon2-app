@@ -1,82 +1,561 @@
-import sqlite3
-from datetime import date, timedelta
-
-DB = "pigeon.db"
-
-def get_conn():
-    c = sqlite3.connect(DB, check_same_thread=False)
-    c.row_factory = sqlite3.Row
-    return c
-
-def init_db():
-    c = get_conn()
-    c.executescript("""
-    CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY, ten TEXT, vai_tro TEXT, mat_khau TEXT);
-    CREATE TABLE IF NOT EXISTS pairs(id INTEGER PRIMARY KEY, trang_thai TEXT DEFAULT 'trong', ghi_chu TEXT DEFAULT '', can_loai INTEGER DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS cycles(id INTEGER PRIMARY KEY AUTOINCREMENT, pair_id INTEGER, ngay_ghep TEXT, ngay_de1 TEXT, ngay_de2 TEXT, ngay_ap TEXT, ngay_no_dk TEXT, ngay_ban_dk TEXT, trang_thai TEXT DEFAULT 'dang_ap');
-    CREATE TABLE IF NOT EXISTS eggs(id INTEGER PRIMARY KEY AUTOINCREMENT, cycle_id INTEGER, ngay_de TEXT, so_luong INTEGER DEFAULT 1, ghi_chu TEXT DEFAULT '');
-    CREATE TABLE IF NOT EXISTS soi_phoi(id INTEGER PRIMARY KEY AUTOINCREMENT, cycle_id INTEGER, ngay_soi TEXT, co_phoi INTEGER DEFAULT 0, khong_phoi INTEGER DEFAULT 0, chet_luu INTEGER DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS ket_qua_no(id INTEGER PRIMARY KEY AUTOINCREMENT, cycle_id INTEGER, ngay_no TEXT, so_no INTEGER DEFAULT 0, so_chet INTEGER DEFAULT 0);
-    """)
-    
-    n = c.execute("SELECT COUNT(*) FROM pairs").fetchone()[0]
-    if n == 0:
-        c.executemany("INSERT INTO pairs(id) VALUES(?)", [(i,) for i in range(1,1501)])
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Trại Chim</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #2e7d32; --bg: #f4f7f6; --card: #ffffff; --text: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: var(--text); }
+        .container { max-width: 1200px; margin: auto; }
         
-    u = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    if u == 0:
-        c.execute("INSERT INTO users VALUES('chu_trai', 'Chu trai', 'admin', '123456')")
-        c.execute("INSERT INTO users VALUES('quan_ly', 'Quan ly', 'user', '123456')")
+        /* Dashboard - Thẻ thống kê */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; cursor: pointer; transition: transform 0.2s; border: 1px solid transparent; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); border-color: #ccc; }
+        .stat-card h3 { margin: 0; font-size: 13px; color: #666; }
+        .stat-card p { margin: 10px 0 0 0; font-size: 22px; font-weight: bold; color: var(--primary); }
+        .stat-card.active-filter { border: 2px solid #2196f3; background: #e3f2fd; }
+
+        /* Khung hiển thị chi tiết khi click */
+        .filter-result-box { display: none; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; border-left: 5px solid #2196f3; }
+        .filter-result-box h4 { margin: 0 0 10px 0; color: #2196f3; }
+        .filter-result-box ul { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+        .close-filter { float: right; background: #ff5252; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+        .chart-container { background: var(--card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+
+        /* Form */
+        .form-section { background: var(--card); padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .section-title { font-size: 18px; color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 5px; margin-bottom: 15px; margin-top: 0; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: inherit; }
         
-    c.commit()
-    c.close()
+        /* Nút bấm */
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { border: none; padding: 12px 20px; font-size: 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1; }
+        .btn-save { background: var(--primary); color: white; }
+        .btn-cancel { background: #f44336; color: white; display: none; }
+        
+        /* Table */
+        .table-section { background: var(--card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 1100px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; font-size: 13px; }
+        th { background: #e8f5e9; color: var(--primary); font-weight: bold; }
+        tr:hover { background: #f1f8e9; }
+        .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; display: inline-block; margin-bottom: 2px;}
+        .bg-green { background: #4caf50; } .bg-red { background: #f44336; } .bg-yellow { background: #ffc107; color: #333; } .bg-blue { background: #2196f3; }
+        
+        /* Nút hành động trong bảng */
+        .action-btns { display: flex; gap: 5px; }
+        .btn-edit { background: #ffc107; color: #333; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+        .btn-delete { background: #ff5252; color: white; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+    </style>
+</head>
+<body>
 
-def log(username, hanh_dong):
-    pass
+<div class="container">
+    <h2 style="text-align: center; color: var(--primary);">🐦 HỆ THỐNG QUẢN LÝ TRẠI CHIM</h2>
 
-def tao_chu_ky(pair_id, ngay_ghep, ngay_de1, ngay_de2, ngay_ap, username):
-    c = get_conn()
-    no_dk = (date.fromisoformat(ngay_ap) + timedelta(days=18)).isoformat()
-    ban_dk = (date.fromisoformat(no_dk) + timedelta(days=28)).isoformat()
-    cur = c.execute("INSERT INTO cycles(pair_id,ngay_ghep,ngay_de1,ngay_de2,ngay_ap,ngay_no_dk,ngay_ban_dk) VALUES(?,?,?,?,?,?,?)", (pair_id, ngay_ghep, ngay_de1, ngay_de2, ngay_ap, no_dk, ban_dk))
-    c.execute("UPDATE pairs SET trang_thai='dang_ap' WHERE id=?", (pair_id,))
-    c.commit()
-    cid = cur.lastrowid
-    c.close()
-    return cid, no_dk, ban_dk
+    <!-- THỐNG KÊ (Có thể bấm vào) -->
+    <div class="dashboard">
+        <div class="stat-card" style="border-top-color: #009688;" onclick="showDetail('activeBoxes', this)">
+            <h3>Ô Đang Hoạt Động</h3><p id="totalActiveBoxes" style="color: #009688;">0</p>
+        </div>
+        <div class="stat-card" style="border-top-color: #673ab7;" onclick="showDetail('totalBirds', this)">
+            <h3>Tổng Số Chim</h3><p id="totalBirds" style="color: #673ab7;">0</p>
+        </div>
+        <div class="stat-card" onclick="showDetail('eggs', this)">
+            <h3>Tổng Trứng Đã Đẻ</h3><p id="totalEggs">0</p>
+        </div>
+        <div class="stat-card" style="border-top-color: #f44336;" onclick="showDetail('dead', this)">
+            <h3>Tổng Chim Chết</h3><p id="totalDead" style="color: #f44336;">0</p>
+        </div>
+        <div class="stat-card" style="border-top-color: #ffc107;" onclick="showDetail('incubating', this)">
+            <h3>Tổng Số Tổ Ấp</h3><p id="totalIncubating" style="color: #ffc107;">0</p>
+        </div>
+    </div>
 
-def cap_nhat_soi(cycle_id, ngay, co, khong, luu, username):
-    c = get_conn()
-    c.execute("INSERT INTO soi_phoi(cycle_id,ngay_soi,co_phoi,khong_phoi,chet_luu) VALUES(?,?,?,?,?)", (cycle_id, ngay, co, khong, luu))
-    c.commit()
-    c.close()
+    <!-- KHUNG HIỂN THỊ CHI TIẾT KHI BẤM VÀO THỐNG KÊ -->
+    <div id="filterResultBox" class="filter-result-box">
+        <button class="close-filter" onclick="closeDetail()">Đóng X</button>
+        <h4 id="filterTitle">Chi tiết</h4>
+        <div id="filterContent"></div>
+    </div>
 
-def cap_nhat_no(cycle_id, pair_id, ngay, so_no, so_chet, username):
-    c = get_conn()
-    c.execute("INSERT INTO ket_qua_no(cycle_id,ngay_no,so_no,so_chet) VALUES(?,?,?,?)", (cycle_id, ngay, so_no, so_chet))
-    c.execute("UPDATE cycles SET trang_thai='dang_nuoi' WHERE id=?", (cycle_id,))
-    c.execute("UPDATE pairs SET trang_thai='dang_nuoi' WHERE id=?", (pair_id,))
-    c.commit()
-    c.close()
+    <div class="chart-container"><canvas id="myChart" height="80"></canvas></div>
 
-def danh_dau_ban(pair_id, username):
-    c = get_conn()
-    c.execute("UPDATE pairs SET trang_thai='trong' WHERE id=?", (pair_id,))
-    c.execute("UPDATE cycles SET trang_thai='da_ban' WHERE pair_id=? AND trang_thai='dang_nuoi'", (pair_id,))
-    c.commit()
-    c.close()
+    <!-- FORM NHẬP LIỆU -->
+    <div class="form-section">
+        <h3 class="section-title" id="formTitle">➕ Thêm Thông Tin Ô Mới</h3>
+        <input type="hidden" id="editId" value="">
+        
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Số Ô (1-1800):</label>
+                <input type="number" id="boxNumber" min="1" max="1800" placeholder="VD: 101">
+            </div>
+            <div class="form-group">
+                <label>Tình trạng Bố Mẹ:</label>
+                <select id="parentStatus">
+                    <option value="Bình thường">Bình thường</option>
+                    <option value="Bố bệnh">Bố bệnh</option>
+                    <option value="Mẹ bệnh">Mẹ bệnh</option>
+                    <option value="Cần cho uống thuốc">Cần cho uống thuốc</option>
+                    <option value="Chết con trống">Chết con trống</option>
+                    <option value="Chết con mái">Chết con mái</option>
+                    <option value="Chết cả 2">Chết cả 2 (Bỏ trống)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Đánh giá Nuôi Con:</label>
+                <select id="parentingRating">
+                    <option value="Chưa đánh giá">Chưa đánh giá</option>
+                    <option value="Đạt">Đạt</option>
+                    <option value="Không đạt">Không đạt</option>
+                    <option value="Loại">Loại</option>
+                </select>
+            </div>
+        </div>
 
-def ds_dang_ap():
-    c = get_conn()
-    r = c.execute("SELECT c.*, p.id as o FROM cycles c JOIN pairs p ON p.id=c.pair_id WHERE c.trang_thai='dang_ap'").fetchall()
-    c.close()
-    return [dict(x) for x in r]
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Trạng Thái Chim:</label>
+                <select id="birdStatus" style="font-weight: bold; color: #d32f2f;">
+                    <option value="Đang chờ đẻ">Đang chờ đẻ</option>
+                    <option value="Đang ấp">Đang ấp</option>
+                    <option value="Đang nuôi con">Đang nuôi con</option>
+                    <option value="Vừa ấp vừa nuôi con">Vừa ấp vừa nuôi con</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Trạng thái Ghép Đôi:</label>
+                <select id="pairingStatus">
+                    <option value="Chưa ghép">Chưa ghép</option>
+                    <option value="Đã ghép">Đã ghép</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Ngày Ghép Đôi:</label>
+                <input type="date" id="pairingDate">
+            </div>
+        </div>
 
-def ds_dang_nuoi():
-    c = get_conn()
-    r = c.execute("SELECT c.*, p.id as o FROM cycles c JOIN pairs p ON p.id=c.pair_id WHERE c.trang_thai='dang_nuoi'").fetchall()
-    c.close()
-    return [dict(x) for x in r]
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Trạng thái Tổ (Ngày tuổi):</label>
+                <select id="nestStatus">
+                    <option value="Chưa ấp">Chưa ấp</option>
+                    <option value="1-5 ngày">1-5 ngày</option>
+                    <option value="6-10 ngày">6-10 ngày</option>
+                    <option value="11-20 ngày">11-20 ngày</option>
+                    <option value="20-25 ngày">20-25 ngày</option>
+                    <option value="25-35 ngày">25-35 ngày (Chuẩn bị bán)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Ngày Đẻ Trứng:</label>
+                <input type="date" id="layDate">
+            </div>
+            <div class="form-group">
+                <label>Ngày Ấp / Ngày Nở:</label>
+                <input type="date" id="hatchDate">
+            </div>
+        </div>
 
-def bao_cao_nam(nam):
-    return []
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Số Tổ Ấp (Cần ghép):</label>
+                <input type="number" id="nestCount" min="0" placeholder="Số tổ...">
+            </div>
+            <div class="form-group">
+                <label>Tổng Số Trứng Đẻ:</label>
+                <input type="number" id="eggCount" min="0" placeholder="Số quả...">
+            </div>
+            <div class="form-group">
+                <label>Trứng Trắng / Chết Phôi / Vỡ:</label>
+                <input type="text" id="eggIssues" placeholder="VD: Trắng ô 5, Vỡ ô 2...">
+            </div>
+        </div>
+
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Số Lượng Con Ghép/Tổ:</label>
+                <input type="number" id="pairedBirds" min="0" placeholder="Số con...">
+            </div>
+            <div class="form-group">
+                <label>Số Lượng Chim Con Chết:</label>
+                <input type="number" id="deadBirdCount" min="0" placeholder="Số con...">
+            </div>
+            <div class="form-group">
+                <label>Ngày Chết & Tuổi:</label>
+                <input type="text" id="deadDetails" placeholder="VD: 15/10, 3 ngày tuổi">
+            </div>
+        </div>
+
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Lý Do Chết:</label>
+                <select id="deadReason">
+                    <option value="Không có">Không có</option>
+                    <option value="Bố mẹ dẫm">Bố mẹ dẫm</option>
+                    <option value="Do bệnh">Do bệnh</option>
+                    <option value="Khác">Lý do khác</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Ngày Xuất Bán:</label>
+                <input type="date" id="soldDate">
+            </div>
+            <div class="form-group">
+                <label>Tổng Dự Kiến Bán / Thực Tế Bán:</label>
+                <input type="number" id="soldCount" min="0" placeholder="Số con xuất bán...">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Ghi Chú Thêm:</label>
+            <textarea id="notes" rows="2" placeholder="Ghi chú chi tiết..."></textarea>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-save" onclick="saveData()" id="btnSave">💾 LƯU THÔNG TIN</button>
+            <button class="btn-cancel" onclick="resetForm()" id="btnCancel">❌ HỦY SỬA</button>
+        </div>
+    </div>
+
+    <!-- BẢNG DỮ LIỆU -->
+    <div class="table-section">
+        <h3 class="section-title">📋 Bảng Tổng Hợp Trại (Sắp xếp theo Số Ô)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Số Ô</th>
+                    <th>Trạng Thái Bố Mẹ</th>
+                    <th>Trạng Thái Chim</th>
+                    <th>Ngày Ghép / Đẻ / Nở</th>
+                    <th>Trạng Thái Tổ</th>
+                    <th>Trứng (Tổng / Sự cố)</th>
+                    <th>Chim Chết</th>
+                    <th>Xuất Bán</th>
+                    <th>Hành Động</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let records = JSON.parse(localStorage.getItem('birdFarmData')) || [];
+    let chartInstance = null;
+    let currentFilter = null;
+
+    function formatDate(dateStr) {
+        if(!dateStr) return "-";
+        const d = new Date(dateStr);
+        return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+    }
+
+    // Hàm xử lý khi bấm vào thẻ thống kê
+    function showDetail(type, element) {
+        // Xóa viền xanh của các thẻ khác
+        document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active-filter'));
+        
+        // Nếu bấm lại vào thẻ đang mở thì đóng lại
+        if (currentFilter === type) {
+            closeDetail();
+            return;
+        }
+        
+        currentFilter = type;
+        element.classList.add('active-filter');
+        
+        const box = document.getElementById('filterResultBox');
+        const title = document.getElementById('filterTitle');
+        const content = document.getElementById('filterContent');
+        
+        let listHtml = "";
+        
+        const sortedRecords = [...records].sort((a, b) => a.boxNumber - b.boxNumber);
+
+        if (type === 'eggs') {
+            title.innerText = "Danh sách các ô có trứng đẻ:";
+            sortedRecords.forEach(r => {
+                if (r.eggCount > 0) {
+                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.eggCount} trứng <span style="color:#666;font-size:12px">(Ngày đẻ: ${formatDate(r.layDate)})</span></li>`;
+                }
+            });
+        } 
+        else if (type === 'dead') {
+            title.innerText = "Danh sách các ô có chim chết:";
+            sortedRecords.forEach(r => {
+                if (r.deadBirdCount > 0) {
+                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.deadBirdCount} con <span style="color:#f44336;font-size:12px">(Lý do: ${r.deadReason} - ${r.deadDetails})</span></li>`;
+                }
+            });
+        }
+        else if (type === 'incubating') {
+            title.innerText = "Danh sách các ô đang ấp trứng:";
+            sortedRecords.forEach(r => {
+                if (r.birdStatus === 'Đang ấp' || r.birdStatus === 'Vừa ấp vừa nuôi con' || r.nestStatus.includes('ngày')) {
+                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.nestCount || 1} tổ <span style="color:#ffc107;font-size:12px">(Trạng thái: ${r.birdStatus || r.nestStatus})</span></li>`;
+                }
+            });
+        }
+        else if (type === 'activeBoxes') {
+            title.innerText = "Danh sách các ô đang hoạt động:";
+            sortedRecords.forEach(r => {
+                if (r.parentStatus !== 'Chết cả 2') {
+                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> Bố mẹ ${r.parentStatus}</li>`;
+                }
+            });
+        }
+        else if (type === 'totalBirds') {
+            title.innerText = "Ước tính chi tiết số lượng chim:";
+            sortedRecords.forEach(r => {
+                if (!r.parentStatus.includes('Chết')) {
+                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> 2 bố mẹ + ${r.pairedBirds || 0} con non</li>`;
+                }
+            });
+        }
+
+        if (listHtml === "") {
+            listHtml = "<li>Không có dữ liệu nào phù hợp.</li>";
+        }
+
+        content.innerHTML = `<ul>${listHtml}</ul>`;
+        box.style.display = "block";
+        window.scrollTo({ top: 300, behavior: 'smooth' }); // Cuộn xuống phần chi tiết
+    }
+
+    function closeDetail() {
+        document.getElementById('filterResultBox').style.display = "none";
+        document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active-filter'));
+        currentFilter = null;
+    }
+
+    function saveData() {
+        const boxNumber = document.getElementById('boxNumber').value;
+        if (!boxNumber) {
+            alert("Vui lòng nhập Số Ô!");
+            return;
+        }
+
+        const editId = document.getElementById('editId').value;
+
+        const newRecord = {
+            id: editId ? parseInt(editId) : Date.now(),
+            boxNumber: parseInt(boxNumber),
+            parentStatus: document.getElementById('parentStatus').value,
+            parentingRating: document.getElementById('parentingRating').value,
+            birdStatus: document.getElementById('birdStatus').value,
+            pairingStatus: document.getElementById('pairingStatus').value,
+            pairingDate: document.getElementById('pairingDate').value,
+            nestCount: parseInt(document.getElementById('nestCount').value) || 0,
+            nestStatus: document.getElementById('nestStatus').value,
+            layDate: document.getElementById('layDate').value,
+            hatchDate: document.getElementById('hatchDate').value,
+            eggCount: parseInt(document.getElementById('eggCount').value) || 0,
+            eggIssues: document.getElementById('eggIssues').value,
+            pairedBirds: parseInt(document.getElementById('pairedBirds').value) || 0,
+            deadBirdCount: parseInt(document.getElementById('deadBirdCount').value) || 0,
+            deadDetails: document.getElementById('deadDetails').value,
+            deadReason: document.getElementById('deadReason').value,
+            soldDate: document.getElementById('soldDate').value,
+            soldCount: parseInt(document.getElementById('soldCount').value) || 0,
+            notes: document.getElementById('notes').value
+        };
+
+        if (editId) {
+            const index = records.findIndex(r => r.id === parseInt(editId));
+            if (index !== -1) records[index] = newRecord;
+            alert(`Đã cập nhật thông tin ô ${boxNumber}!`);
+        } else {
+            records.push(newRecord);
+            alert(`Đã thêm mới ô ${boxNumber}!`);
+        }
+
+        localStorage.setItem('birdFarmData', JSON.stringify(records)); 
+        resetForm();
+        renderAll(); 
+        closeDetail(); // Đóng bảng chi tiết nếu đang mở
+    }
+
+    function editRecord(id) {
+        const record = records.find(r => r.id === id);
+        if (!record) return;
+
+        document.getElementById('editId').value = record.id;
+        document.getElementById('boxNumber').value = record.boxNumber;
+        document.getElementById('parentStatus').value = record.parentStatus;
+        document.getElementById('parentingRating').value = record.parentingRating;
+        document.getElementById('birdStatus').value = record.birdStatus || 'Đang chờ đẻ';
+        document.getElementById('pairingStatus').value = record.pairingStatus;
+        document.getElementById('pairingDate').value = record.pairingDate;
+        document.getElementById('nestCount').value = record.nestCount;
+        document.getElementById('nestStatus').value = record.nestStatus;
+        document.getElementById('layDate').value = record.layDate;
+        document.getElementById('hatchDate').value = record.hatchDate;
+        document.getElementById('eggCount').value = record.eggCount;
+        document.getElementById('eggIssues').value = record.eggIssues;
+        document.getElementById('pairedBirds').value = record.pairedBirds;
+        document.getElementById('deadBirdCount').value = record.deadBirdCount;
+        document.getElementById('deadDetails').value = record.deadDetails;
+        document.getElementById('deadReason').value = record.deadReason;
+        document.getElementById('soldDate').value = record.soldDate;
+        document.getElementById('soldCount').value = record.soldCount;
+        document.getElementById('notes').value = record.notes;
+
+        document.getElementById('formTitle').innerText = "✏️ Chỉnh Sửa Thông Tin Ô " + record.boxNumber;
+        document.getElementById('btnSave').innerText = "💾 CẬP NHẬT THAY ĐỔI";
+        document.getElementById('btnSave').style.background = "#2196f3";
+        document.getElementById('btnCancel').style.display = "block";
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteRecord(id) {
+        if (confirm("Bạn có chắc chắn muốn xóa thông tin ô này?")) {
+            records = records.filter(r => r.id !== id);
+            localStorage.setItem('birdFarmData', JSON.stringify(records));
+            renderAll();
+            closeDetail();
+        }
+    }
+
+    function resetForm() {
+        document.querySelectorAll('input').forEach(input => input.value = '');
+        document.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+        document.querySelectorAll('textarea').forEach(ta => ta.value = '');
+        
+        document.getElementById('editId').value = "";
+        document.getElementById('formTitle').innerText = "➕ Thêm Thông Tin Ô Mới";
+        document.getElementById('btnSave').innerText = "💾 LƯU THÔNG TIN";
+        document.getElementById('btnSave').style.background = "var(--primary)";
+        document.getElementById('btnCancel').style.display = "none";
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        if (records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Chưa có dữ liệu.</td></tr>';
+            return;
+        }
+
+        const sortedRecords = [...records].sort((a, b) => a.boxNumber - b.boxNumber);
+
+        sortedRecords.forEach(r => {
+            const tr = document.createElement('tr');
+            
+            let badgeClass = r.parentStatus.includes('bệnh') || r.parentStatus.includes('Chết') ? 'bg-red' : 'bg-green';
+            let nestBadge = r.nestStatus.includes('25-35') ? 'bg-blue' : (r.nestStatus === 'Chưa ấp' ? 'bg-yellow' : 'bg-green');
+            let birdStatusHtml = r.birdStatus ? `<span class="badge bg-blue">${r.birdStatus}</span>` : '-';
+
+            tr.innerHTML = `
+                <td><strong>${r.boxNumber}</strong></td>
+                <td><span class="badge ${badgeClass}">${r.parentStatus}</span></td>
+                <td>${birdStatusHtml}</td>
+                <td style="font-size: 12px;">
+                    Ghép: ${formatDate(r.pairingDate)}<br>
+                    Đẻ: ${formatDate(r.layDate)}<br>
+                    Nở/Ấp: ${formatDate(r.hatchDate)}
+                </td>
+                <td>
+                    <span class="badge ${nestBadge}">${r.nestStatus}</span><br>
+                    <span style="font-size:11px;">Số tổ: ${r.nestCount || 0}</span>
+                </td>
+                <td>
+                    Tổng: ${r.eggCount} quả<br>
+                    <span style="color:red; font-size:11px;">${r.eggIssues ? r.eggIssues : ''}</span>
+                </td>
+                <td style="color: ${r.deadBirdCount > 0 ? 'red' : 'inherit'}">
+                    ${r.deadBirdCount} con <br>
+                    <span style="font-size:11px;">${r.deadDetails} - ${r.deadReason}</span>
+                </td>
+                <td>
+                    Dự kiến: ${r.pairedBirds}<br>
+                    Thực tế: <strong>${r.soldCount}</strong><br>
+                    <span style="font-size:11px;">${formatDate(r.soldDate)}</span>
+                </td>
+                <td>
+                    <div class="action-btns">
+                        <button class="btn-edit" onclick="editRecord(${r.id})">Sửa</button>
+                        <button class="btn-delete" onclick="deleteRecord(${r.id})">Xóa</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderStatsAndChart() {
+        let totalActiveBoxes = 0, totalBirds = 0, totalEggs = 0, totalDead = 0, totalIncubating = 0;
+        let chartData = {}; 
+
+        records.forEach(r => {
+            if (r.parentStatus !== 'Chết cả 2') totalActiveBoxes++;
+            if(!r.parentStatus.includes('Chết')) totalBirds += 2; 
+            totalBirds += (r.pairedBirds || 0); 
+            totalEggs += (r.eggCount || 0);
+            totalDead += (r.deadBirdCount || 0);
+            
+            if (r.birdStatus === 'Đang ấp' || r.birdStatus === 'Vừa ấp vừa nuôi con' || r.nestStatus.includes('ngày')) {
+                totalIncubating += (r.nestCount || 1);
+            }
+
+            if (r.layDate) {
+                const date = new Date(r.layDate);
+                const monthYear = `${date.getMonth()+1}/${date.getFullYear()}`;
+                if (!chartData[monthYear]) chartData[monthYear] = { eggs: 0, dead: 0 };
+                chartData[monthYear].eggs += r.eggCount;
+                chartData[monthYear].dead += r.deadBirdCount;
+            }
+        });
+
+        document.getElementById('totalActiveBoxes').innerText = totalActiveBoxes;
+        document.getElementById('totalBirds').innerText = totalBirds;
+        document.getElementById('totalEggs').innerText = totalEggs;
+        document.getElementById('totalDead').innerText = totalDead;
+        document.getElementById('totalIncubating').innerText = totalIncubating;
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const labels = Object.keys(chartData).sort(); 
+        const dataEggs = labels.map(label => chartData[label].eggs);
+        const dataDead = labels.map(label => chartData[label].dead);
+
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels.length ? labels : ['Chưa có dữ liệu'],
+                datasets: [
+                    { label: 'Số trứng đẻ', data: dataEggs.length ? dataEggs : [0], backgroundColor: '#4caf50' },
+                    { label: 'Số chim chết', data: dataDead.length ? dataDead : [0], backgroundColor: '#f44336' }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { title: { display: true, text: 'Biểu đồ sinh sản theo Tháng' } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
+    function renderAll() {
+        renderTable();
+        renderStatsAndChart();
+    }
+
+    renderAll();
+</script>
+
+</body>
+</html>
