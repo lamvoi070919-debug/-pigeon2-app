@@ -11,12 +11,14 @@
         .container { max-width: 1200px; margin: auto; }
         
         /* Dashboard - Thẻ thống kê */
-        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
-        .stat-card { background: var(--card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; cursor: pointer; transition: transform 0.2s; border: 1px solid transparent; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); border-color: #ccc; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; border: 1px solid #eee; }
         .stat-card h3 { margin: 0; font-size: 13px; color: #666; }
-        .stat-card p { margin: 10px 0 0 0; font-size: 22px; font-weight: bold; color: var(--primary); }
-        .stat-card.active-filter { border: 2px solid #2196f3; background: #e3f2fd; }
+        .stat-card p { margin: 10px 0 5px 0; font-size: 24px; font-weight: bold; color: var(--primary); }
+        
+        /* Nút bấm xem chi tiết */
+        .btn-detail { background: #e3f2fd; color: #2196f3; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; width: 100%; margin-top: 5px; font-weight: bold; }
+        .btn-detail:active { background: #bbdefb; }
 
         /* Khung hiển thị chi tiết khi click */
         .filter-result-box { display: none; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; border-left: 5px solid #2196f3; }
@@ -35,7 +37,7 @@
         label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; }
         input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: inherit; }
         
-        /* Nút bấm */
+        /* Nút bấm Form */
         .btn-group { display: flex; gap: 10px; margin-top: 10px; }
         button { border: none; padding: 12px 20px; font-size: 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1; }
         .btn-save { background: var(--primary); color: white; }
@@ -61,26 +63,36 @@
 <div class="container">
     <h2 style="text-align: center; color: var(--primary);">🐦 HỆ THỐNG QUẢN LÝ TRẠI CHIM</h2>
 
-    <!-- THỐNG KÊ (Có thể bấm vào) -->
+    <!-- THỐNG KÊ -->
     <div class="dashboard">
-        <div class="stat-card" style="border-top-color: #009688;" onclick="showDetail('activeBoxes', this)">
-            <h3>Ô Đang Hoạt Động</h3><p id="totalActiveBoxes" style="color: #009688;">0</p>
+        <div class="stat-card" style="border-top: 4px solid #009688;">
+            <h3>Ô Đang Hoạt Động</h3>
+            <p id="totalActiveBoxes" style="color: #009688;">0</p>
+            <button class="btn-detail" onclick="showDetail('activeBoxes')">Xem chi tiết ô</button>
         </div>
-        <div class="stat-card" style="border-top-color: #673ab7;" onclick="showDetail('totalBirds', this)">
-            <h3>Tổng Số Chim</h3><p id="totalBirds" style="color: #673ab7;">0</p>
+        <div class="stat-card" style="border-top: 4px solid #673ab7;">
+            <h3>Tổng Số Chim</h3>
+            <p id="totalBirds" style="color: #673ab7;">0</p>
+            <button class="btn-detail" onclick="showDetail('totalBirds')">Xem chi tiết chim</button>
         </div>
-        <div class="stat-card" onclick="showDetail('eggs', this)">
-            <h3>Tổng Trứng Đã Đẻ</h3><p id="totalEggs">0</p>
+        <div class="stat-card" style="border-top: 4px solid var(--primary);">
+            <h3>Tổng Trứng Đã Đẻ</h3>
+            <p id="totalEggs">0</p>
+            <button class="btn-detail" onclick="showDetail('eggs')">Xem chi tiết trứng</button>
         </div>
-        <div class="stat-card" style="border-top-color: #f44336;" onclick="showDetail('dead', this)">
-            <h3>Tổng Chim Chết</h3><p id="totalDead" style="color: #f44336;">0</p>
+        <div class="stat-card" style="border-top: 4px solid #f44336;">
+            <h3>Tổng Chim Chết</h3>
+            <p id="totalDead" style="color: #f44336;">0</p>
+            <button class="btn-detail" onclick="showDetail('dead')">Xem chi tiết chim chết</button>
         </div>
-        <div class="stat-card" style="border-top-color: #ffc107;" onclick="showDetail('incubating', this)">
-            <h3>Tổng Số Tổ Ấp</h3><p id="totalIncubating" style="color: #ffc107;">0</p>
+        <div class="stat-card" style="border-top: 4px solid #ffc107;">
+            <h3>Tổng Số Tổ Ấp</h3>
+            <p id="totalIncubating" style="color: #ffc107;">0</p>
+            <button class="btn-detail" onclick="showDetail('incubating')">Xem chi tiết tổ ấp</button>
         </div>
     </div>
 
-    <!-- KHUNG HIỂN THỊ CHI TIẾT KHI BẤM VÀO THỐNG KÊ -->
+    <!-- KHUNG HIỂN THỊ CHI TIẾT KHI BẤM VÀO -->
     <div id="filterResultBox" class="filter-result-box">
         <button class="close-filter" onclick="closeDetail()">Đóng X</button>
         <h4 id="filterTitle">Chi tiết</h4>
@@ -253,7 +265,6 @@
 <script>
     let records = JSON.parse(localStorage.getItem('birdFarmData')) || [];
     let chartInstance = null;
-    let currentFilter = null;
 
     function formatDate(dateStr) {
         if(!dateStr) return "-";
@@ -261,30 +272,17 @@
         return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
     }
 
-    // Hàm xử lý khi bấm vào thẻ thống kê
-    function showDetail(type, element) {
-        // Xóa viền xanh của các thẻ khác
-        document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active-filter'));
-        
-        // Nếu bấm lại vào thẻ đang mở thì đóng lại
-        if (currentFilter === type) {
-            closeDetail();
-            return;
-        }
-        
-        currentFilter = type;
-        element.classList.add('active-filter');
-        
+    // Hàm hiển thị chi tiết khi bấm nút
+    function showDetail(type) {
         const box = document.getElementById('filterResultBox');
         const title = document.getElementById('filterTitle');
         const content = document.getElementById('filterContent');
         
         let listHtml = "";
-        
         const sortedRecords = [...records].sort((a, b) => a.boxNumber - b.boxNumber);
 
         if (type === 'eggs') {
-            title.innerText = "Danh sách các ô có trứng đẻ:";
+            title.innerText = "🐣 Chi tiết các ô có trứng đẻ:";
             sortedRecords.forEach(r => {
                 if (r.eggCount > 0) {
                     listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.eggCount} trứng <span style="color:#666;font-size:12px">(Ngày đẻ: ${formatDate(r.layDate)})</span></li>`;
@@ -292,7 +290,7 @@
             });
         } 
         else if (type === 'dead') {
-            title.innerText = "Danh sách các ô có chim chết:";
+            title.innerText = "💀 Chi tiết các ô có chim chết:";
             sortedRecords.forEach(r => {
                 if (r.deadBirdCount > 0) {
                     listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.deadBirdCount} con <span style="color:#f44336;font-size:12px">(Lý do: ${r.deadReason} - ${r.deadDetails})</span></li>`;
@@ -300,15 +298,17 @@
             });
         }
         else if (type === 'incubating') {
-            title.innerText = "Danh sách các ô đang ấp trứng:";
+            title.innerText = "🪺 Chi tiết các ô đang ấp/nuôi con:";
             sortedRecords.forEach(r => {
-                if (r.birdStatus === 'Đang ấp' || r.birdStatus === 'Vừa ấp vừa nuôi con' || r.nestStatus.includes('ngày')) {
-                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.nestCount || 1} tổ <span style="color:#ffc107;font-size:12px">(Trạng thái: ${r.birdStatus || r.nestStatus})</span></li>`;
+                // Lọc ra những ô có trạng thái ấp hoặc nuôi con
+                if (r.birdStatus === 'Đang ấp' || r.birdStatus === 'Đang nuôi con' || r.birdStatus === 'Vừa ấp vừa nuôi con' || r.nestStatus.includes('ngày')) {
+                    listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> ${r.nestCount || 1} tổ 
+                    <span style="color:#2196f3;font-size:12px">(Trạng thái: ${r.birdStatus || 'Chưa rõ'})</span></li>`;
                 }
             });
         }
         else if (type === 'activeBoxes') {
-            title.innerText = "Danh sách các ô đang hoạt động:";
+            title.innerText = "🟢 Chi tiết các ô đang hoạt động:";
             sortedRecords.forEach(r => {
                 if (r.parentStatus !== 'Chết cả 2') {
                     listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> Bố mẹ ${r.parentStatus}</li>`;
@@ -316,7 +316,7 @@
             });
         }
         else if (type === 'totalBirds') {
-            title.innerText = "Ước tính chi tiết số lượng chim:";
+            title.innerText = "🐦 Ước tính chi tiết số lượng chim:";
             sortedRecords.forEach(r => {
                 if (!r.parentStatus.includes('Chết')) {
                     listHtml += `<li><strong>Ô ${r.boxNumber}:</strong> 2 bố mẹ + ${r.pairedBirds || 0} con non</li>`;
@@ -330,13 +330,13 @@
 
         content.innerHTML = `<ul>${listHtml}</ul>`;
         box.style.display = "block";
-        window.scrollTo({ top: 300, behavior: 'smooth' }); // Cuộn xuống phần chi tiết
+        
+        // Tự động cuộn xuống khung chi tiết để người dùng dễ thấy
+        box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function closeDetail() {
         document.getElementById('filterResultBox').style.display = "none";
-        document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active-filter'));
-        currentFilter = null;
     }
 
     function saveData() {
@@ -383,7 +383,7 @@
         localStorage.setItem('birdFarmData', JSON.stringify(records)); 
         resetForm();
         renderAll(); 
-        closeDetail(); // Đóng bảng chi tiết nếu đang mở
+        closeDetail(); 
     }
 
     function editRecord(id) {
