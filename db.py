@@ -89,7 +89,7 @@ def ds_dang_ap():
     c.close(); return [dict(x) for x in r]
 
 def ds_dang_nuoi():
-    c = get_conn()
+    c = get_conn() to
     r = c.execute("""SELECT c.*, p.id as o FROM cycles c JOIN pairs p ON p.id=c.pair_id
         WHERE c.trang_thai='dang_nuoi'""").fetchall()
     c.close(); return [dict(x) for x in r]
